@@ -1,0 +1,314 @@
+{
+  "name": "AI News Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "chatId": "-4992994963",
+        "text": "={{$json.text}}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        416,
+        -80
+      ],
+      "id": "bea44fb9-395f-425b-a310-c84a2f2ace6d",
+      "name": "Send a text message",
+      "webhookId": "9938b097-c83b-41a5-9a6c-4af493463d0f",
+      "credentials": {
+        "telegramApi": {
+          "id": "zGZSrZSeXlhvAquT",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -496,
+        -624
+      ],
+      "id": "36caf5fe-4920-4faa-8d9e-af62d558be67",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "https://news.google.com/rss?hl=en-IN&gl=IN&ceid=IN:en",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -320,
+        -704
+      ],
+      "id": "395009bb-0816-4b61-9e74-7797ff2c172a",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.xml",
+      "typeVersion": 1,
+      "position": [
+        -144,
+        -608
+      ],
+      "id": "7d706e22-ee00-4f17-b211-bde434b5e7fc",
+      "name": "XML"
+    },
+    {
+      "parameters": {
+        "jsCode": "// TEMP DEBUG\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -640,
+        -160
+      ],
+      "id": "fefe2de1-8750-43ce-b6e8-dece1bb4dbe1",
+      "name": "Duplicate Filter"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "llama3"
+            },
+            {
+              "name": "prompt",
+              "value": "={{\n`Summarize this news in 2 professional lines:\n\nTitle: ${$json.title}\n\nDescription: ${$json.description}`\n}}"
+            },
+            {
+              "name": "=stream",
+              "value": "={{ false }}"
+            },
+            {
+              "name": "original",
+              "value": "={{$json}}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -432,
+        80
+      ],
+      "id": "ed1849e5-3bc2-4184-8008-08ec60385f91",
+      "name": "Ollama HTTP Node"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rss = items[0].json.rss;\nconst newsItems = rss?.channel?.item || [];\n\nreturn newsItems.slice(0, 5).map(article => ({\n  json: {\n    title: article.title || \"No Title\",\n    description: article.description || \"\",\n    link: article.link || \"\"\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        96,
+        -576
+      ],
+      "id": "4a067f27-bbe4-482a-a467-b4ac40447287",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "jsCode": "for (const item of items) {\n\n  const cleanedSummary = item.json.response\n    .replace(/Here is.*?:\\s*/i, \"\")\n    .replace(/Note:.*$/is, \"\")\n    .trim();\n\n  item.json = {\n    title: item.json.title,\n    link: item.json.link,\n    description: item.json.description,\n    summary: cleanedSummary\n  };\n\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16,
+        -256
+      ],
+      "id": "40e3979e-832c-4b13-bd1c-1bb640219f2b",
+      "name": "Merge Summary"
+    },
+    {
+      "parameters": {
+        "jsCode": "const MAX_LENGTH = 3800;\nlet messages = [];\nlet currentChunk = \"\";\n\nfor (const item of items) {\n\n  const article =\n`━━━━━━━━━━━━━━━━━━\n📰 *${item.json.title}*\n\n${item.json.summary}\n\n🔗 [Click here to read more](${item.json.link})\n\n`;\n\n  if ((currentChunk + article).length > MAX_LENGTH) {\n    messages.push(currentChunk.trim());\n    currentChunk = article;\n  } else {\n    currentChunk += article;\n  }\n}\n\nif (currentChunk.length > 0) {\n  messages.push(currentChunk.trim());\n}\n\nreturn messages.map(text => ({\n  json: { text }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        80
+      ],
+      "id": "626de7e2-236f-4720-bf5e-99bb2e8a115c",
+      "name": "Format Message"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -240,
+        -144
+      ],
+      "id": "2d2d802e-0883-4e89-b4ac-ce705661a7a9",
+      "name": "Merge"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "XML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message": {
+      "main": [
+        []
+      ]
+    },
+    "XML": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Duplicate Filter": {
+      "main": [
+        [
+          {
+            "node": "Ollama HTTP Node",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama HTTP Node": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Duplicate Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Summary": {
+      "main": [
+        [
+          {
+            "node": "Format Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Message": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Merge Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "1c9a9355-b6ea-4945-b62c-b60fc21908b5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7d6f7636b6b679baf48ba28dde888fe5281fcbbfb18579e87f70cdbcf597fe10"
+  },
+  "id": "RdO1xSXlaiCsK5A9",
+  "tags": []
+}
